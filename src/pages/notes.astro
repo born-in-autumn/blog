@@ -1,0 +1,31 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const notes = (await getCollection("notes", ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf()
+);
+---
+
+<BaseLayout title="Notes">
+  <h1 class="page-title">笔记</h1>
+  <p class="page-lede">这里是笔记文章的列表。</p>
+
+  <ul class="post-list">
+    {notes.map((note) => (
+      <li>
+        <a class="post-title" href={`/notes/${note.slug}/`}>
+          {note.data.title}
+        </a>
+        <span class="post-date">
+          {note.data.date.toLocaleDateString("zh-CN", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}
+        </span>
+        {note.data.description && <p class="post-desc">{note.data.description}</p>}
+      </li>
+    ))}
+  </ul>
+</BaseLayout>
