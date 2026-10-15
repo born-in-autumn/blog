@@ -1,8 +1,8 @@
 ---
 import { getCollection } from "astro:content";
-import BaseLayout from "../../layouts/BaseLayout.astro";
-import Comments from "../../components/Comments.tsx";
-import { getRepoInfo } from "../../lib/repo";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Comments from "../components/Comments.tsx";
+import { getRepoInfo } from "../lib/repo";
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog", ({ data }) => !data.draft);
