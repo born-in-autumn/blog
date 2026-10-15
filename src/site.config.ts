@@ -14,7 +14,7 @@ export const siteConfig = {
   defaultLocale: "en" as const,
   bio: {
     en: "Writing about whatever I'm building.",
-    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我没有准备英文版本",
+    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我暂时还没有准备英文版本",
   },
   nav: [
     { href: "/blog/", en: "Home", zh: "首页" },
@@ -22,8 +22,8 @@ export const siteConfig = {
     { href: "/blog/notes/", en: "Notes", zh: "笔记" }, // 新增笔记Tab
   ],
   social: {
-    github: "", // e.g. "https://github.com/your-name" (blank hides the link)
+    github: "https://github.com/born-in-autumn", // e.g. "https://github.com/your-name" (blank hides the link)
     twitter: "",
-    email: "",
+    email: "1187338299@qq.com",
   },
 };
