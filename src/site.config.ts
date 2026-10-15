@@ -13,8 +13,8 @@ export const siteConfig = {
   author: "Robin",
   defaultLocale: "en" as const,
   bio: {
-    en: "Writing about whatever I'm building.",
-    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我暂时还没有准备英文版本",
+    en: "Writing about whatever I'm building. Due to limited time, these materials are not yet available in English. Please kindly understand, but I will promptly address this matter as soon as I have the opportunity",
+    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我暂时还没有准备英文版本/Due to limited time, these materials are not yet available in English. Please kindly understand, but I will promptly address this matter as soon as I have the opportunity",
   },
   nav: [
     { href: "/blog/", en: "Home", zh: "首页" },
