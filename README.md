@@ -1,3 +1,3 @@
 # Blog
 
-Something about Rust and I
+Something about Rust and me
