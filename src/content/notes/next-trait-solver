@@ -1,0 +1,173 @@
+---
+title: "The trait solver learning of rust"
+date: 2026-10-23
+description: "trait solver"
+---
+
+我先把这块代码通读了一遍：`rustc_next_trait_solver`（约 12.5k 行）、它依赖的 `rustc_type_ir::solve` / `search_graph`（约 4k 行）、以及 `rustc_trait_selection/src/solve` 的胶水层，另外对照了 dev-guide 的 goals-and-clauses / canonicalization / caching 几章。
+
+按你之前的偏好，我不会一次性把 12k 行倒给你，而是分成几站、每站讲完确认一次。下面是路线图，**这一条只讲第 1 站**。
+
+## 课程路线图
+
+| 站点 | 内容 | 主要文件 |
+|---|---|---|
+| **1（本次）** | 输入/输出契约：Goal、Canonical、Response、Certainty | [solve/mod.rs](compiler/rustc_type_ir/src/solve/mod.rs)、[canonical.rs](compiler/rustc_type_ir/src/canonical.rs) |
+| 2 | 分层架构：Interner、SolverDelegate、TypingMode，哪些代码属于谁 | [delegate.rs](compiler/rustc_next_trait_solver/src/delegate.rs)、[solve/delegate.rs](compiler/rustc_trait_selection/src/solve/delegate.rs) |
+| 3 | 求值主循环：canonicalize → search graph → compute_goal → 嵌套目标定点迭代 | [eval_ctxt/mod.rs](compiler/rustc_next_trait_solver/src/solve/eval_ctxt/mod.rs) |
+| 4 | 候选（candidate）装配与合并：impl / param-env / alias-bound / builtin | [assembly/mod.rs](compiler/rustc_next_trait_solver/src/solve/assembly/mod.rs)、[trait_goals.rs](compiler/rustc_next_trait_solver/src/solve/trait_goals.rs) |
+| 5 | 缓存与循环：global cache、provisional cache、PathKind、溢出 | [search_graph/mod.rs](compiler/rustc_type_ir/src/search_graph/mod.rs) |
+| 6 | Canonicalizer 细节 + response 实例化回原上下文 | [canonical/](compiler/rustc_next_trait_solver/src/canonical/) |
+| 7 | opaque types、`TypingMode::ErasedNotCoherence`、rerun 机制（直接对应你现在 TSRI #293 那条线） | [solve/mod.rs:164](compiler/rustc_type_ir/src/solve/mod.rs#L164)、[eval_ctxt/mod.rs:749](compiler/rustc_next_trait_solver/src/solve/eval_ctxt/mod.rs#L749) |
+| 8 | coherence、与旧 solver 的接缝、怎么找可贡献的 issue 和写测试 | [coherence.rs](compiler/rustc_next_trait_solver/src/coherence.rs)、[select.rs](compiler/rustc_trait_selection/src/solve/select.rs) |
+
+---
+
+# 第 1 站：solver 的输入输出契约
+
+整个 next trait solver，剥掉所有实现，就是一个函数：
+
+```
+canonical_query_input  ──────►  QueryResult
+（一个 goal + 环境）              （确定 / 不确定 / 没有解）
+```
+
+其它一切——候选装配、缓存、循环检测——都是这个函数的实现细节。先把这个契约吃透，后面看代码才不会迷路。
+
+## 1.1 前置概念：为什么需要 canonical
+
+这三个概念不搞清楚，后面所有类型都会看不懂：
+
+**推断变量（inference variable）**：类型检查期间还不知道的类型，写成 `?0`。它是 `InferCtxt` 内部统一表里的一个编号，出了这个 `InferCtxt` 就没有意义。
+
+**占位符（placeholder）**：证明 `for<'a> T: Foo<'a>` 时，solver 会挑一个"任意的具体生命周期"代表 `'a`。它也不能和别的上下文的占位符混用。
+
+**universe（宇宙）**：给变量分层。调用方自己能命名的变量在宇宙 0；每进一层 `for<>` binder 就开一个新宇宙。作用是防止 binder 内部的变量"泄漏"到外面。
+
+三者都绑定在某个具体的 `InferCtxt` 上。但 trait 求解结果要**缓存成 query**（`evaluate_obligation`、`typeck` 等都是 query），也可能被**别的 `InferCtxt`** 复用。所以必须把变量"去本地化"：
+
+> 把 `?0`、占位符、region 变量统统换成按出现顺序编号的 **bound var**，并把这些变量的"种类"记在旁边。这个动作叫 **canonicalization**。
+
+## 1.2 `Goal`：要证明什么
+
+定义在 [rustc_type_ir/src/solve/mod.rs:393](compiler/rustc_type_ir/src/solve/mod.rs#L393)：
+
+```rust
+pub struct Goal<I: Interner, P> {
+    pub param_env: I::ParamEnv,
+    pub predicate: P,
+}
+```
+
+两个字段，含义完全不同：
+
+- **`predicate`**：要证明的命题。实际类型是 `Predicate<I>`，`PredicateKind` 里有 trait 约束、projection、`NormalizesTo`、outlives、`WellFormed`、`Subtype`、`Coerce`、`ConstEvaluatable` 等等（[eval_ctxt/mod.rs:971](compiler/rustc_next_trait_solver/src/solve/eval_ctxt/mod.rs#L971) 的 `compute_goal` 就是在按 kind 分派）。
+- **`param_env`**：允许假设什么。它的内容就是 `caller_bounds`——当前函数/impl 的 where 子句加上隐含 bounds，且已经 elaborate 和 normalize 过（[rustc_middle/src/ty/mod.rs:1018](compiler/rustc_middle/src/ty/mod.rs#L1018)）。trait 求解里大量候选来自这里，即 `CandidateSource::ParamEnv`。
+
+> 顺带解释 `I: Interner`：这是一个"类型系统操作接口"。rustc 里 `I = TyCtxt<'tcx>`，`I::Ty = Ty<'tcx>`，`I::Predicate = Predicate<'tcx>`；rust-analyzer 用自己的一套实现。所以 solver 代码里你看到 `I::Ty`，在心里读成 `Ty<'tcx>` 就行。
+
+## 1.3 `Canonical`：怎么把 goal 搬出当前上下文
+
+定义在 [canonical.rs:35](compiler/rustc_type_ir/src/canonical.rs#L35)：
+
+```rust
+pub struct Canonical<I, V> {
+    pub value: V,                     // 变量已替换成 Bound(0), Bound(1), ...
+    pub max_universe: UniverseIndex,  // 这个 goal 能看到的最大宇宙
+    pub var_kinds: I::CanonicalVarKinds, // 每个 bound var 是什么种类
+}
+```
+
+`var_kinds` 是关键：它记录每个 canonical 变量的"种类"，比如 `CanonicalVarKind::Ty { ui, sub_root }`、`Int`、`Region(universe)`、`PlaceholderTy(..)`。有了它，在**另一个** `InferCtxt` 里就能为每个变量创建对应的新变量，把 goal 实例化回去。
+
+`max_universe` 记录输入里最高能命名到哪个宇宙。solver 在证明过程中可能进入新的 binder、创建更高的宇宙；那些宇宙里的变量可以出现在响应里当占位符，但**不能**被当成输入变量返回给调用方——这个字段就是用来划这条界的（后面讲 leak check 会再用到）。
+
+## 1.4 `QueryInput`：query 必须是自包含的
+
+```rust
+pub struct QueryInput<I: Interner, P> {
+    pub goal: Goal<I, P>,
+    pub predefined_opaques_in_body: I::PredefinedOpaques,
+}
+```
+[mod.rs:444](compiler/rustc_type_ir/src/solve/mod.rs#L444)
+
+为什么除了 goal 还要带一个 opaque 表？因为求解过程中遇到 `impl Trait` 类型时，需要知道"这个 opaque 的隐藏类型当前是什么"才能正常化。这个信息不在 goal 里，而在调用方的 `InferCtxt` 里。为了让缓存的 query key 相同就必然得到相同结果，必须把它一起 canonicalize 进输入。
+
+> 这一条和你的 TSRI #293 直接相关：`predefined_opaques_in_body`、`TypingMode`、以及缓存的 `param_env` 之间的交互，正是那个 ICE 的核心。第 7 站会展开。
+
+## 1.5 `Response`：证明了什么、学到了什么
+
+```rust
+pub struct Response<I: Interner> {
+    pub certainty: Certainty,
+    pub var_values: I::GenericArgs,
+    pub external_constraints: I::ExternalConstraints,
+}
+```
+[mod.rs:588](compiler/rustc_type_ir/src/solve/mod.rs#L588)
+
+三个字段分别回答三个问题：
+
+1. **`certainty`**：到底证没证出来（见 1.6）。
+2. **`var_values`**：对输入里的每个 canonical 变量，solver 推断出它等于什么。比如输入 `?0: Clone`，求解过程中发现 `?0 = Vec<u32>`，那 `var_values[0] = Vec<u32>`。**它和 goal 在同一个 canonical 变量空间里**，所以调用方要先用 `instantiate_and_apply_query_response`（[canonical/mod.rs:101](compiler/rustc_next_trait_solver/src/canonical/mod.rs#L101)）实例化，再把结果 unify 回自己的推断变量。如果什么都没学到，就是 identity（[mod.rs:596](compiler/rustc_type_ir/src/solve/mod.rs#L596)），这是最常见的快路径。
+3. **`external_constraints`**：不能用普通 unification 表达的约束，结构见 [ExternalConstraintsData](compiler/rustc_type_ir/src/solve/mod.rs#L671)：
+   - `region_constraints`：生命周期约束；
+   - `opaque_types`：本次求解**新注册**的 opaque → hidden type 映射；
+   - `normalization_nested_goals`：`Projection` 目标委托给 `NormalizesTo` 时留下的嵌套目标，必须交回调用方继续处理。
+
+注意 `CanonicalResponse<I> = Canonical<I, Response<I>>`（[mod.rs:26](compiler/rustc_type_ir/src/solve/mod.rs#L26)）——**响应本身也是 canonical 的**，`var_values` 里的类型同样是 bound var 形式，`max_universe` 可能比输入大（因为 solver 内部新建了宇宙）。
+
+## 1.6 `Certainty`：三态，不是两态
+
+```rust
+pub enum Certainty { Yes, Maybe(MaybeInfo) }
+```
+[mod.rs:765](compiler/rustc_type_ir/src/solve/mod.rs#L765)
+
+加上外层的 `Err(NoSolution)`，一共三种结论：
+
+| 结论 | 含义 | 调用方该做什么 |
+|---|---|---|
+| `Err(NoSolution)` | 在当前假设下**确定不成立** | 报错，或排除这个候选 |
+| `Ok(Yes)` | **确定成立** | 应用 `var_values` 和外部约束 |
+| `Ok(Maybe(..))` | 现在**判断不了**，以后可能变 Yes 也可能变 No | 暂缓，等推断变量有进展后重试 |
+
+`MaybeInfo`（[mod.rs:772](compiler/rustc_type_ir/src/solve/mod.rs#L772)）说明"为什么不确定"：
+
+- `cause: MaybeCause::Ambiguity` —— 真的是多个答案/信息不足，比如 `?x: Trait`；
+- `cause: MaybeCause::Overflow { .. }` —— 递归太深/没到定点，不是语义上的不确定，只是算力不够；
+- `opaque_types_jank`、`stalled_on_coroutines` —— 给 opaque types 和 coroutine 的两个特殊标记，第 7 站再讲。
+
+关键区别要说三遍：**`Maybe` 不是失败**。旧 solver 里"返回 `None`"经常混着两种意思，新 solver 把它拆开了；`NoSolution` 是强承诺，`Maybe` 是"我不知道"。合并多个子目标时用 `Certainty::and`（[mod.rs:898](compiler/rustc_type_ir/src/solve/mod.rs#L898)）：一个 Yes 加一个 Maybe 得 Maybe；两个 Maybe 合并时 overflow 会压过 ambiguity，因为诊断要告诉用户"是递归限制的问题"。
+
+## 1.7 全链路串起来
+
+```
+调用方（typeck/codegen/coherence）
+   │  Goal { param_env, predicate }        ← 带本地推断变量
+   ▼
+canonicalize_goal                              [canonical/mod.rs:55]
+   │  CanonicalQueryInput { canonical goal, predefined_opaques, TypingMode }
+   ▼
+search_graph.evaluate_goal                     [search_graph/mod.rs:804]
+   │  查缓存 / 查循环 / 没命中才真正算
+   ▼
+EvalCtxt::compute_goal                         [eval_ctxt/mod.rs:971]
+   │  按 PredicateKind 分派 → 装配候选 → 合并
+   ▼
+CanonicalResponse { certainty, var_values, external_constraints }
+   │
+   ▼
+instantiate_and_apply_query_response           [canonical/mod.rs:101]
+   │  实例化响应、unify var_values、注册 region/opaque 约束
+   ▼
+回到调用方的 InferCtxt：Yes / Maybe / NoSolution
+```
+
+代码里的入口是 `SolverDelegateEvalExt::evaluate_root_goal`（[eval_ctxt/mod.rs:233](compiler/rustc_next_trait_solver/src/solve/eval_ctxt/mod.rs#L233)）；注意它的文档写着"只能在 solver 外面调用，在 solver 内部调用会新建 search graph、破坏循环检测"。
+
+另外这棵树上有一个文档里还没有的新东西：`QueryResultOrRerunNonErased`（[mod.rs:34](compiler/rustc_type_ir/src/solve/mod.rs#L34)）。当 `TypingMode` 是 `ErasedNotCoherence` 时，solver 会先"假装所有 opaque 都不可见"算一遍；如果算的过程中访问了 opaque，就返回 `RerunNonErased`，让上层换回原始 `TypingMode` 重算。这是性能优化，不影响语义。第 7 站细讲。
+
+---
+
