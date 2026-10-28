@@ -171,3 +171,20 @@ instantiate_and_apply_query_response           [canonical/mod.rs:101]
 
 ---
 
+binder = 一组变量 + 它们管辖的内容。
+
+语法上就是 forall<'x> { ... } 里从 <'x> 到右花括号的那一整块：
+
+
+forall<'x> {   'a: 'x   }
+└───┬────┘   └────┬────┘
+  变量表          body
+└────────────┬────────────┘
+        一个 binder
+为什么叫"绑"
+因为 body 里的 'x 指回这组变量里的某一个。它不是一个具体的生命周期，是一个"占位引用"：
+
+
+binder 的变量表:  [ 'x ]
+body:             'a: 'x      ← 这个 'x 是"变量表里的第 0 个"
+这种指回关系在类型系统里叫 BoundVar。所以同一个 binder 里，'x 永远指自己这层，不会指外面。多层嵌套时靠 de Bruijn index 区分"往外数几层"。
