@@ -4,9 +4,6 @@ date: 2026-11-02
 description: "chalk system learning"
 ---
 
-抱歉，刚才那条被截断了。重新完整整理一遍，这次一次到位。
-
----
 
 # 📘 chalk 学习笔记（截至 4.2）
 
