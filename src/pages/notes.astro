@@ -14,7 +14,7 @@ const notes = (await getCollection("notes", ({ data }) => !data.draft)).sort(
   <ul class="post-list">
     {notes.map((note) => (
       <li>
-        <a class="post-title" href={`/notes/${note.slug}/`}>
+        <a class="post-title" href={`/blog/notes/${note.slug}/`}>
           {note.data.title}
         </a>
         <span class="post-date">

@@ -13,17 +13,17 @@ export const siteConfig = {
   author: "Robin",
   defaultLocale: "en" as const,
   bio: {
-    en: "Writing about whatever I'm building.",
-    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我没有准备英文版本",
+    en: "Writing about whatever I'm building. Due to limited time, these materials are not yet available in English. Please kindly understand, but I will promptly address this matter as soon as I have the opportunity",
+    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我暂时还没有准备英文版本/Due to limited time, these materials are not yet available in English. Please kindly understand, but I will promptly address this matter as soon as I have the opportunity",
   },
   nav: [
-    { href: "/", en: "Home", zh: "首页" },
-    { href: "/about", en: "About", zh: "关于" },
-    { href: "/notes", en: "Notes", zh: "笔记" }, // 新增笔记Tab
+    { href: "/blog/", en: "Home", zh: "首页" },
+    { href: "/blog/about/", en: "About", zh: "关于" },
+    { href: "/blog/notes/", en: "Notes", zh: "笔记" }, // 新增笔记Tab
   ],
   social: {
-    github: "", // e.g. "https://github.com/your-name" (blank hides the link)
+    github: "https://github.com/born-in-autumn", // e.g. "https://github.com/your-name" (blank hides the link)
     twitter: "",
-    email: "",
+    email: "1187338299@qq.com",
   },
 };
