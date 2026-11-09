@@ -12,28 +12,38 @@ const posts = (await getCollection("blog", ({ data }) => !data.draft)).sort(
   <h1 class="page-title">{siteConfig.title}</h1>
   <p class="page-lede">
     <span data-lang="en">{siteConfig.bio.en}</span>
-    <span data-lang="zh">{siteConfig.bio.zh}</span>
+    <span data-lang="zh">{siteConfig.bio.zh}<span class="bio-note">{siteConfig.bio.zhNote}</span></span>
   </p>
 
   <ul class="post-list">
     {
-      posts.map((post) => (
-        <li>
-          <a class="post-title" href={`/blog/${post.slug}/`}>
-            {post.data.title}
-          </a>
-          <span class="post-date">
-            {post.data.date.toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </span>
-          {post.data.description && (
-            <p class="post-desc">{post.data.description}</p>
-          )}
-        </li>
-      ))
+      posts.map((post) => {
+        const date = post.data.date.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        return (
+          <li>
+            {(post.data.repo || post.data.pr) && (
+              <p class="post-kicker">
+                {post.data.repo && <span class="post-tag">{post.data.repo}</span>}
+                {post.data.pr && <span>#{post.data.pr}</span>}
+                <span>{date}</span>
+              </p>
+            )}
+            <a class="post-title" href={`/blog/${post.slug}/`}>
+              {post.data.title}
+            </a>
+            {!(post.data.repo || post.data.pr) && (
+              <span class="post-date">{date}</span>
+            )}
+            {post.data.description && (
+              <p class="post-desc">{post.data.description}</p>
+            )}
+          </li>
+        );
+      })
     }
   </ul>
 </BaseLayout>

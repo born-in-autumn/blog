@@ -1,6 +1,9 @@
 ---
-title: "rust-clippy PR#17819"
+title: "给 Clippy 加一条 Option 写法的 Lint"
 date: 2026-10-03
+description: "Rust 里 Option 有非常多的写法，这条 Lint 就是冲着这个来的。"
+repo: clippy
+pr: "17819"
 ---
 
 ### 概要

@@ -20,6 +20,12 @@ const { owner, repo } = getRepoInfo();
 <BaseLayout title={post.data.title} description={post.data.description}>
   <article>
     <header class="post-header">
+      {(post.data.repo || post.data.pr) && (
+        <p class="post-kicker">
+          {post.data.repo && <span class="post-tag">{post.data.repo}</span>}
+          {post.data.pr && <span>#{post.data.pr}</span>}
+        </p>
+      )}
       <h1 class="page-title">{post.data.title}</h1>
       <span class="post-date">
         {post.data.date.toLocaleDateString("en-US", {
