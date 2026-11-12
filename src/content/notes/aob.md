@@ -90,3 +90,17 @@ compute           变换：region 求传递闭包
 步1支A    …placeholder_ty_outlives…                            数据侧:982    占位类型→region
 步1支B    …alias_ty_outlives…                                  数据侧:1025    alias→region
 ```
+
+
+Binder<I, T>	一层封条:for<...> { value }。两个字段:内容 + 变量清单。
+bound_vars	这层封条声明的变量清单,&List<BoundVariableKind>。清单的长度和顺序定义了编号。
+BoundVariableKind	清单里的一项,告诉你是哪类变量:Ty(BoundTyKind) / Region(BoundRegionKind) / Const(定义)。
+BoundVar	纯粹一个编号 0, 1, 2...,只在所属 binder 内有意义(newtype)。
+DebruijnIndex	嵌套 binder 时的"层号":0 = 最内层,1 = 往外一层…… 见下文例子。
+ReBound(binder_id, BoundRegion)	类型池里表示"bound region"的 region(定义)。binder_id 是层号,BoundRegion 里装编号 + 标签。
+BoundRegion { var, kind }	bound region 的完整写法:编号 var + 标签 kind(定义)。
+BoundRegionKind	标签,只跟显示/诊断有关:Anon / Named(DefId) / NamedForPrinting(Symbol) / ClosureEnv。
+BoundTy { var, kind }	type 版的上面那个:kind 是 Anon 或 Param(DefId)。
+Placeholder { universe, bound }	!1_2 这种"从 for<> 里拿出来当固定未知数"的东西。bound 里记着它当初是哪个 binder 变量。
+RePlaceholder	region 版 placeholder。
+Binder::dummy(v)	空清单的 binder,即"没有变量的 for";会 assert v 里没有 escaping bound vars。
