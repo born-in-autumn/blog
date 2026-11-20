@@ -5,7 +5,6 @@ description: "chalk system learning"
 ---
 
 
-# 📘 chalk 学习笔记（截至 4.2）
 
 ## 第 1 章：What is chalk?
 
@@ -232,5 +231,3 @@ forall<T> {
 ```
 
 ---
-
-需要的话，我可以再补一张「角色/术语速查表」（中英对照 + 一句话解释），或者直接继续 4.3《Implied bounds》。你说哪样？

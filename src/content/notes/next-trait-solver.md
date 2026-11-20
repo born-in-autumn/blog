@@ -4,9 +4,6 @@ date: 2026-10-23
 description: "trait solver"
 ---
 
-我先把这块代码通读了一遍：`rustc_next_trait_solver`（约 12.5k 行）、它依赖的 `rustc_type_ir::solve` / `search_graph`（约 4k 行）、以及 `rustc_trait_selection/src/solve` 的胶水层，另外对照了 dev-guide 的 goals-and-clauses / canonicalization / caching 几章。
-
-按你之前的偏好，我不会一次性把 12k 行倒给你，而是分成几站、每站讲完确认一次。下面是路线图，**这一条只讲第 1 站**。
 
 ## 课程路线图
 
