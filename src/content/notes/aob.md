@@ -104,3 +104,19 @@ BoundTy { var, kind }	type 版的上面那个:kind 是 Anon 或 Param(DefId)。
 Placeholder { universe, bound }	!1_2 这种"从 for<> 里拿出来当固定未知数"的东西。bound 里记着它当初是哪个 binder 变量。
 RePlaceholder	region 版 placeholder。
 Binder::dummy(v)	空清单的 binder,即"没有变量的 for";会 assert v 里没有 escaping bound vars。
+
+
+
+
+Late Bound vs Early Bound
+
+具体看两个参数
+fn bar<'a>(b: &'a String) -> &'a String { b }   // 'a late-bound
+fn foo<'a: 'a>(b: &'a String) -> &'a String { b } // 'a early-bound
+
+fn a<'x>(p: &'x u8)	late	只在入参,无约束
+fn b<'x>(p: &'x u8) -> &'x u8	late	返回值也用,但入参已经约束了它
+fn c<'x>() -> &'x u8	early	只出不进
+fn d<'x>(p: &'x u8) where 'x: 'static	early	where
+fn e<'x: 'static>(p: &'x u8)	early	有 bound
+impl<'x> Trait for &'x u8	early	impl 泛型,没有 late 的概念

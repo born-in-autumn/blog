@@ -14,7 +14,7 @@ export const siteConfig = {
   defaultLocale: "en" as const,
   bio: {
     en: "Writing about whatever I'm building. Due to limited time, these materials are not yet available in English. Please kindly understand, but I will promptly address this matter as soon as I have the opportunity",
-    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我暂时还没有准备英文版本",
+    zh: "这里有我在Rust社区里贡献的所有PR，由于精力原因，我暂时还没有准备英文版本，这里的每一篇文章基本上都只写了个标题，笔记部分更是乱如麻，各种杂七杂八的东西混在一起，不过就这样吧，我暂时没有精力维护这些了，因为我并不打算公开这些东西，只要我自己看得懂就行，未来等我在Rust Compiler的贡献达到下一个阶段时，再来更新吧",
     zhNote: "Due to limited time, these materials are not yet available in English. Please kindly understand, but I will promptly address this matter as soon as I have the opportunity",
   },
   nav: [
